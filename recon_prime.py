@@ -7,23 +7,18 @@ import asyncio
 import os
 import statistics
 from urllib.parse import urlparse
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-
 
 # ==============================
 # Dependency Check
 # ==============================
-
 def check_dependencies():
     required = ["subfinder", "httpx-toolkit"]
     return [tool for tool in required if shutil.which(tool) is None]
 
-
 # ==============================
 # Risk Level
 # ==============================
-
 def risk_level(score):
     if score >= 70:
         return "CRITICAL"
@@ -33,11 +28,9 @@ def risk_level(score):
         return "MEDIUM"
     return "LOW"
 
-
 # ==============================
 # Scoring Engine
 # ==============================
-
 def evaluate_target(data):
     score = 0
     reasons = []
@@ -82,11 +75,9 @@ def evaluate_target(data):
 
     return score, reasons
 
-
 # ==============================
 # Async HTTPX
 # ==============================
-
 async def run_httpx(subdomains):
     process = await asyncio.create_subprocess_exec(
         "httpx-toolkit",
@@ -106,11 +97,9 @@ async def run_httpx(subdomains):
 
     return stdout.decode().splitlines()
 
-
 # ==============================
 # HTML Report
 # ==============================
-
 def generate_html(domain, targets, folder):
     path = os.path.join(folder, "report.html")
 
@@ -161,26 +150,22 @@ def generate_html(domain, targets, folder):
 
     return path
 
-
 # ==============================
 # Plugins
 # ==============================
-
 def run_nuclei(urls, folder):
     if shutil.which("nuclei") is None:
         print("[-] Nuclei kurulu değil, atlanıyor.")
         return
 
-    print("[*] Nuclei (optimized mode) çalıştırılıyor...")
+    print(f"[*] Nuclei (optimized mode) {len(urls)} hedef için çalıştırılıyor...")
 
     output = os.path.join(folder, "nuclei.txt")
     temp_file = os.path.join(folder, "nuclei_targets.txt")
 
-    # Hedef dosyası oluştur
     with open(temp_file, "w", encoding="utf-8") as f:
         f.write("\n".join(urls))
 
-    # Optimize edilmiş nuclei komutu
     nuclei_command = [
         "nuclei",
         "-l", temp_file,
@@ -196,14 +181,13 @@ def run_nuclei(urls, folder):
         subprocess.run(nuclei_command, stdout=out_f)
 
     os.remove(temp_file)
-
-    print("[+] Nuclei taraması tamamlandı.")
-
+    print(f"[+] Nuclei taraması tamamlandı: {output}")
 
 def run_screenshot(urls, folder):
     if shutil.which("gowitness") is None:
         return
 
+    os.makedirs(os.path.join(folder, "screenshots"), exist_ok=True)
     print("[*] Screenshot alınıyor (değerli hedefler)...")
     subprocess.run(
         ["gowitness", "file", "-f", "-", "-P", os.path.join(folder, "screenshots")],
@@ -211,11 +195,9 @@ def run_screenshot(urls, folder):
         text=True
     )
 
-
 # ==============================
 # Dashboard
 # ==============================
-
 def launch_dashboard(folder):
     try:
         from flask import Flask, send_from_directory
@@ -232,11 +214,9 @@ def launch_dashboard(folder):
     print("[*] Dashboard: http://127.0.0.1:5000")
     app.run()
 
-
 # ==============================
 # Main
 # ==============================
-
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--domain", required=True)
@@ -252,51 +232,46 @@ async def main():
         print("Eksik araçlar:", missing)
         return
 
+    # Subfinder
     result = subprocess.run(
         ["subfinder", "-d", domain, "-silent"],
         capture_output=True,
         text=True
     )
-
     subdomains = result.stdout.splitlines()
     print(f"[+] {len(subdomains)} subdomain bulundu.")
 
+    # HTTPX
     lines = await run_httpx(subdomains)
 
+    # Target scoring
     targets = []
     content_lengths = []
-
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = []
-
         for line in lines:
             try:
                 data = json.loads(line)
                 futures.append(executor.submit(evaluate_target, data))
-
                 cl = int(data.get("content_length", 0) or 0)
                 content_lengths.append(cl)
-
                 targets.append({
                     "url": data.get("url"),
                     "status_code": data.get("status_code"),
                     "content_length": cl
                 })
-
             except:
                 continue
-
         for i, future in enumerate(futures):
             score, reasons = future.result()
             targets[i]["score"] = score
             targets[i]["risk"] = risk_level(score)
             targets[i]["reasons"] = reasons
 
-    # Anomaly Detection
+    # Anomaly detection
     if len(content_lengths) > 5:
         avg = statistics.mean(content_lengths)
         stdev = statistics.stdev(content_lengths)
-
         for t in targets:
             if t["content_length"] > avg + (2 * stdev):
                 t["score"] += 20
@@ -321,7 +296,6 @@ async def main():
 
     if args.dashboard:
         launch_dashboard(folder)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
