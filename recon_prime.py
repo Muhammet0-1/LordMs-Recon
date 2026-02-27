@@ -168,18 +168,36 @@ def generate_html(domain, targets, folder):
 
 def run_nuclei(urls, folder):
     if shutil.which("nuclei") is None:
+        print("[-] Nuclei kurulu değil, atlanıyor.")
         return
 
-    print("[*] Nuclei çalıştırılıyor (değerli hedefler)...")
-    output = os.path.join(folder, "nuclei.txt")
+    print("[*] Nuclei (optimized mode) çalıştırılıyor...")
 
-    with open(output, "w") as f:
-        subprocess.run(
-            ["nuclei", "-l", "-", "-silent"],
-            input="\n".join(urls),
-            text=True,
-            stdout=f
-        )
+    output = os.path.join(folder, "nuclei.txt")
+    temp_file = os.path.join(folder, "nuclei_targets.txt")
+
+    # Hedef dosyası oluştur
+    with open(temp_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(urls))
+
+    # Optimize edilmiş nuclei komutu
+    nuclei_command = [
+        "nuclei",
+        "-l", temp_file,
+        "-severity", "critical,high",
+        "-rate-limit", "50",
+        "-timeout", "5",
+        "-retries", "1",
+        "-silent",
+        "-no-color"
+    ]
+
+    with open(output, "w", encoding="utf-8") as out_f:
+        subprocess.run(nuclei_command, stdout=out_f)
+
+    os.remove(temp_file)
+
+    print("[+] Nuclei taraması tamamlandı.")
 
 
 def run_screenshot(urls, folder):
