@@ -1,13 +1,54 @@
 import subprocess
 import json
 import argparse
-import sys
 import shutil
 import asyncio
+import html as html_lib
 import os
+import re
 import statistics
+from pathlib import Path
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
+
+
+DOMAIN_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+RISK_LEVELS = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+
+
+def validate_domain(domain):
+    """Validate and normalize a hostname supplied by the user."""
+    if not isinstance(domain, str) or not domain or domain != domain.strip():
+        raise ValueError("Domain boş olamaz veya başında/sonunda boşluk içeremez.")
+
+    if domain.endswith("."):
+        raise ValueError("Domain sonunda nokta bulunamaz.")
+
+    try:
+        normalized = domain.encode("idna").decode("ascii").lower()
+    except UnicodeError as exc:
+        raise ValueError("Geçersiz uluslararası domain.") from exc
+
+    if len(normalized) > 253:
+        raise ValueError("Domain 253 karakterden uzun olamaz.")
+
+    labels = normalized.split(".")
+    if len(labels) < 2 or any(not DOMAIN_LABEL_RE.fullmatch(label) for label in labels):
+        raise ValueError("Geçerli bir hostname girin (ör. example.com).")
+
+    return normalized
+
+
+def build_output_folder(domain, base_dir=None):
+    """Return a safe output path contained directly under base_dir."""
+    normalized = validate_domain(domain)
+    root = Path(base_dir or Path.cwd()).resolve()
+    folder = (root / f"recon_{normalized}").resolve()
+
+    if folder.parent != root:
+        raise ValueError("Çıktı klasörü çalışma dizininin dışında olamaz.")
+
+    return folder, normalized
 
 # ==============================
 # Dependency Check
@@ -102,11 +143,12 @@ async def run_httpx(subdomains):
 # ==============================
 def generate_html(domain, targets, folder):
     path = os.path.join(folder, "report.html")
+    escaped_domain = html_lib.escape(str(domain), quote=True)
 
     html = f"""
     <html>
     <head>
-    <title>LordMs Recon Report - {domain}</title>
+    <title>LordMs Recon Report - {escaped_domain}</title>
     <style>
         body {{ background:#111; color:#eee; font-family:Arial; }}
         table {{ width:100%; border-collapse:collapse; }}
@@ -119,7 +161,7 @@ def generate_html(domain, targets, folder):
     </style>
     </head>
     <body>
-    <h2>LordMs Recon Report - {domain}</h2>
+    <h2>LordMs Recon Report - {escaped_domain}</h2>
     <table>
     <tr>
     <th>URL</th>
@@ -132,14 +174,22 @@ def generate_html(domain, targets, folder):
     """
 
     for t in targets:
+        escaped_url = html_lib.escape(str(t.get("url", "")), quote=True)
+        escaped_status = html_lib.escape(str(t.get("status_code", "")), quote=True)
+        escaped_score = html_lib.escape(str(t.get("score", "")), quote=True)
+        escaped_length = html_lib.escape(str(t.get("content_length", "")), quote=True)
+        risk = str(t.get("risk", "LOW"))
+        safe_risk = risk if risk in RISK_LEVELS else "LOW"
+        reasons = ", ".join(str(reason) for reason in t.get("reasons", []))
+        escaped_reasons = html_lib.escape(reasons, quote=True)
         html += f"""
         <tr>
-        <td>{t['url']}</td>
-        <td>{t['status_code']}</td>
-        <td>{t['score']}</td>
-        <td class="{t['risk']}">{t['risk']}</td>
-        <td>{t['content_length']}</td>
-        <td>{", ".join(t['reasons'])}</td>
+        <td>{escaped_url}</td>
+        <td>{escaped_status}</td>
+        <td>{escaped_score}</td>
+        <td class="{safe_risk}">{safe_risk}</td>
+        <td>{escaped_length}</td>
+        <td>{escaped_reasons}</td>
         </tr>
         """
 
@@ -223,14 +273,17 @@ async def main():
     parser.add_argument("--dashboard", action="store_true")
     args = parser.parse_args()
 
-    domain = args.domain
-    folder = f"recon_{domain}"
-    os.makedirs(folder, exist_ok=True)
+    try:
+        folder, domain = build_output_folder(args.domain)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     missing = check_dependencies()
     if missing:
         print("Eksik araçlar:", missing)
         return
+
+    os.makedirs(folder, exist_ok=True)
 
     # Subfinder
     result = subprocess.run(
