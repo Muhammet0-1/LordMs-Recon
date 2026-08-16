@@ -72,4 +72,3 @@ def write_html_report(domain: str, targets: list[Target], folder: Path) -> Path:
 """
     path.write_text(document, encoding="utf-8")
     return path
-

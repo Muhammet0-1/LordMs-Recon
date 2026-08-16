@@ -18,4 +18,3 @@ Do not include third-party secrets, personal data, or unauthorized scan results.
 ## Scope
 
 Reports about LordMs Recon itself are welcome. Findings from targets scanned with the tool belong to the applicable asset owner or bug bounty program and must follow that program's disclosure process.
-

@@ -38,4 +38,3 @@ def build_output_folder(domain: str, base_dir: str | Path | None = None) -> tupl
     if folder.parent != root:
         raise ValueError("Output folder must remain directly below the selected root.")
     return folder, normalized
-

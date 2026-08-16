@@ -18,4 +18,3 @@ def launch_dashboard(folder: Path) -> None:
         return send_from_directory(folder, "report.html")
 
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
-

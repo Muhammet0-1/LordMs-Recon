@@ -20,4 +20,3 @@ python -m unittest discover -s tests -v
 ```
 
 Before opening a pull request, update documentation when behavior or CLI options change. Describe what changed, why it changed, how it was tested, and any compatibility or security implications.
-

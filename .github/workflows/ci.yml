@@ -30,4 +30,3 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Verify CLI
         run: lordms-recon --help
-

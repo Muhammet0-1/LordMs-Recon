@@ -66,4 +66,3 @@ def apply_content_length_anomalies(targets: list[Target]) -> None:
             target.score += 20
             target.risk = risk_level(target.score)
             target.reasons.append("content-length statistical outlier")
-
