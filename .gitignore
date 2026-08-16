@@ -1,4 +1,20 @@
-recon_*/
+# Python
 __pycache__/
-*.log
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Virtual environments and local tooling
+.venv/
 venv/
+.env
+.idea/
+.vscode/
+
+# Generated scan output
+recon_*/
+*.log

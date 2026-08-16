@@ -1,248 +1,144 @@
-# LordMs Recon Framework
+# LordMs Recon
 
-LordMs Recon Framework, bug bounty çalışmaları ve yalnızca açıkça yetkilendirilmiş güvenlik testleri için geliştirilmiş bir keşif ve hedef önceliklendirme aracıdır. Alt alan adlarını toplar, erişilebilir HTTP hedeflerini inceler ve operatörün hangi hedefleri önce değerlendirebileceğine ilişkin sezgisel bir puan üretir.
+[![CI](https://github.com/Muhammet0-1/LordMs-Recon/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammet0-1/LordMs-Recon/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Üretilen puanlar ve `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` etiketleri doğrulanmış bir güvenlik açığı veya kesin risk seviyesi değildir. Bunlar yalnızca manuel inceleme önceliği oluşturmak için kullanılan sinyallerdir.
+LordMs Recon is an authorization-first reconnaissance CLI for bug bounty and controlled security assessments. It discovers subdomains, probes reachable HTTP services, produces transparent prioritization signals, and writes HTML and JSON reports for manual review.
 
-## Temel özellikler
+> Priority labels are heuristics—not confirmed vulnerabilities, severity ratings, or permission to test a target.
 
-- [Subfinder](https://github.com/projectdiscovery/subfinder) ile subdomain keşfi
-- ProjectDiscovery [httpx](https://github.com/projectdiscovery/httpx) aracının `httpx-toolkit` çalıştırılabilir dosyası üzerinden canlı hedef ve metadata toplama
-- Hostname, HTTP durum kodu, sayfa başlığı ve içerik uzunluğuna dayalı sezgisel hedef puanlama
-- Puanı en az 20 olan hedefler için isteğe bağlı araçlar olarak Nuclei entegrasyonu ve Gowitness ekran görüntüleri
-- Puan, gerekçe, durum kodu ve içerik uzunluğunu gösteren HTML raporu
-- `--dashboard` ile isteğe bağlı yerel Flask sunucusu
-- Hostname doğrulama, IDNA normalizasyonu ve çıktı klasörünü çalışma diziniyle sınırlama
-- HTML raporundaki dinamik veriler için HTML escaping
+## Highlights
 
-## Çalışma akışı
+- Subdomain discovery with [Subfinder](https://docs.projectdiscovery.io/opensource/subfinder/overview)
+- HTTP metadata collection with ProjectDiscovery [httpx](https://docs.projectdiscovery.io/opensource/httpx/overview)
+- Automatic detection of `httpx` and CachyOS/Arch's `httpx-toolkit` executable name
+- Explainable scoring based on hostname labels, response status, page title, and content-length outliers
+- Escaped, responsive HTML output plus machine-readable JSON
+- Optional Nuclei and Gowitness integrations that run only when explicitly requested
+- Domain/IDNA validation, safe output paths, subprocess timeouts, and actionable tool errors
+- Installable Python package, console entry point, unit tests, and multi-version CI
 
-1. `-d/--domain` girdisi doğrulanır, küçük harfe ve gerektiğinde IDNA biçimine dönüştürülür.
-2. `subfinder` ve `httpx-toolkit` çalıştırılabilir dosyalarının `PATH` içinde bulunup bulunmadığı kontrol edilir.
-3. `subfinder`, verilen domain için subdomain listesi üretir.
-4. Liste standart girdi üzerinden `httpx-toolkit` aracına aktarılır; URL, başlık, durum kodu, teknoloji, web sunucusu ve content-length alanları istenir.
-5. JSON satırları ayrıştırılır ve hedefler sezgisel olarak puanlanır. En az altı content-length değeri olduğunda istatistiksel uç değer kontrolü de uygulanır.
-6. Hedefler puana göre sıralanır ve `report.html` oluşturulur.
-7. Puanı en az 20 olan hedef varsa, kurulu olmaları durumunda Nuclei ve Gowitness otomatik olarak çalıştırılır.
-8. `--dashboard` verilmişse rapor Flask geliştirme sunucusuyla `127.0.0.1:5000` adresinde sunulur.
+## Pipeline
 
-`httpx-toolkit` tarafından döndürülen teknoloji ve web sunucusu metadatası mevcut sürümde rapora veya puanlamaya aktarılmaz.
+```mermaid
+flowchart TD
+    A[Authorized domain] --> B[Subfinder]
+    B --> C[httpx]
+    C --> D[Parse and validate records]
+    D --> E[Explainable prioritization]
+    E --> F[HTML and JSON reports]
+    E --> G{Explicit options}
+    G -->|--run-nuclei| H[Nuclei]
+    G -->|--screenshots| I[Gowitness]
+```
 
-## Gereksinimler
+## Requirements
 
-### Python
+- Python 3.10+
+- `subfinder`
+- `httpx` or `httpx-toolkit`
+- Optional: `nuclei`, `gowitness`, Flask
 
-Projede kesin bir Python sürümü sabitlenmemiştir. Kaynak kod `asyncio.run()` kullandığı için en az Python 3.7 gerekir. Kullanılan tek üçüncü taraf Python paketi Flask'tır ve sürümü [`requirements.txt`](requirements.txt) içinde sabitlenmemiştir. Flask yalnızca dashboard özelliğinde kullanılır.
+Install external tools from their official documentation. Tool versions and command-line interfaces can change; pin versions you have validated in repeatable environments.
 
-### Harici araçlar
-
-| Araç | Durum | Kaynak kodun çağırdığı komut |
-|---|---|---|
-| Subfinder | Zorunlu | `subfinder` |
-| ProjectDiscovery httpx | Zorunlu | `httpx-toolkit` |
-| Nuclei | İsteğe bağlı; uygun hedef varsa otomatik çalışır | `nuclei` |
-| Gowitness | İsteğe bağlı; uygun hedef varsa otomatik çalışır | `gowitness file -f - -P ...` |
-| Flask | Yalnızca `--dashboard` için | Python paketi |
-
-Buradaki HTTP aracı Python'daki `httpx` paketi değildir. ProjectDiscovery tarafından geliştirilen Go tabanlı CLI aracıdır.
-
-> **Uyumluluk notu:** ProjectDiscovery'nin resmî Go kurulumu çalıştırılabilir dosyayı `httpx` adıyla oluşturur; bu proje ise şu anda `httpx-toolkit` adını arar ve çağırır. Kurulumunuzda uyumlu aracın `PATH` içinde gerçekten `httpx-toolkit` adıyla erişilebilir olması gerekir. Benzer biçimde Gowitness'ın CLI sözleşmesi sürümler arasında değişebilir; kullanılan sürümün yukarıdaki `file` komutunu desteklediğini doğrulayın.
-
-## Kurulum
-
-### 1. Depoyu alın
+## Installation
 
 ```bash
 git clone https://github.com/Muhammet0-1/LordMs-Recon.git
 cd LordMs-Recon
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-### 2. Python sanal ortamını hazırlayın
+For the optional local dashboard:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+python -m pip install -e ".[dashboard]"
 ```
 
-Sanal ortamı etkinleştirme komutu POSIX uyumlu kabuklar içindir. Diğer platformlarda Python belgelerindeki sanal ortam yönergelerini izleyin.
+## Usage
 
-### 3. Harici araçları kurun
-
-Kurulum yöntemi işletim sistemine göre değişebilir. Güncel ve platforma uygun yöntemler için araçların resmî belgelerini kullanın:
-
-- [Subfinder kurulumu](https://docs.projectdiscovery.io/opensource/subfinder/install)
-- [ProjectDiscovery httpx kurulumu](https://docs.projectdiscovery.io/opensource/httpx/install)
-- [Nuclei kurulumu](https://docs.projectdiscovery.io/opensource/nuclei/install)
-- [Gowitness kurulumu](https://github.com/sensepost/gowitness/wiki/Installation)
-
-Go ortamı kullanan kurulumlara örnek:
+Run passive discovery and HTTP probing against a domain for which you have explicit authorization:
 
 ```bash
-go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
-go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-go install github.com/sensepost/gowitness@latest
+lordms-recon --domain example.com
 ```
 
-`@latest` zaman içinde farklı sürümler kurar ve tekrar üretilebilir bir araç zinciri sağlamaz. Kararlı kullanımda doğruladığınız sürüm etiketlerini sabitleyin. Ayrıca yukarıdaki `httpx` ve Gowitness uyumluluk notlarını dikkate alın; yalnızca bu komutların başarıyla tamamlanması mevcut kaynak kodla CLI uyumluluğunu garanti etmez.
-
-Zorunlu komut adlarını kontrol edin:
+The legacy entry point remains available:
 
 ```bash
-command -v subfinder
-command -v httpx-toolkit
+PYTHONPATH=src python3 recon_prime.py --domain example.com
 ```
 
-İsteğe bağlı araçları da kullanacaksanız kontrol edin:
+Use a specific HTTP probing executable when auto-detection is not appropriate:
 
 ```bash
-command -v nuclei
-command -v gowitness
+lordms-recon -d example.com --httpx-bin httpx-toolkit
 ```
 
-## Kullanım
-
-Temel kullanım:
+Active integrations are opt-in:
 
 ```bash
-python3 recon_prime.py -d example.com
+lordms-recon -d example.com --run-nuclei --rate-limit 25
+lordms-recon -d example.com --screenshots
 ```
 
-Yerel dashboard ile kullanım:
+See every supported option:
 
 ```bash
-python3 recon_prime.py -d example.com --dashboard
+lordms-recon --help
 ```
 
-CLI yalnızca şu seçenekleri destekler:
+## Output
 
-- `-d`, `--domain`: Zorunlu hostname girdisi
-- `--dashboard`: Raporu yerel Flask sunucusunda açar
-
-Domain girdisi yalnızca hostname olmalıdır. Büyük harfler küçük harfe, uluslararası karakterler IDNA biçimine dönüştürülür. URL, port, wildcard, yol, tek etiketli ad ve sondaki nokta kabul edilmez.
-
-```text
-Kabul edilir:   example.com
-Kabul edilir:   api.example.com
-Reddedilir:     https://example.com
-Reddedilir:     example.com:443
-Reddedilir:     *.example.com
-Reddedilir:     example.com/admin
-Reddedilir:     localhost
-Reddedilir:     example.com.
-```
-
-## Örnek kullanım senaryosu
-
-Aşağıdaki örnek yalnızca dokümantasyon için ayrılmış `example.com` alanını kullanır:
-
-```bash
-python3 recon_prime.py --domain example.com
-```
-
-Araç önce `example.com` için subdomain keşfi yapar, bulunan hedefleri HTTP açısından kontrol eder, raporu üretir ve puanı en az 20 olan hedefler varsa kurulu Nuclei/Gowitness entegrasyonlarını çalıştırır.
-
-## Çıktı yapısı
-
-Başarılı bir çalışma için çıktı klasörü geçerli ve normalize edilmiş domain adıyla çalışma dizininin doğrudan altında oluşturulur:
+Each run writes into a domain-specific folder directly below the chosen output root:
 
 ```text
 recon_example.com/
 ├── report.html
-├── nuclei.txt
-└── screenshots/
+├── report.json
+├── nuclei.txt          # only with --run-nuclei
+└── screenshots/        # only with --screenshots
 ```
 
-- `report.html`, zorunlu keşif adımları tamamlanıp uygulama rapor aşamasına ulaştığında oluşturulur.
-- `nuclei.txt`, puanı en az 20 olan hedef bulunduğunda ve `nuclei` kurulu olduğunda oluşturulur; bulgu yoksa boş olabilir.
-- `screenshots/`, puanı en az 20 olan hedef bulunduğunda ve `gowitness` kurulu olduğunda oluşturulur. İçindeki gerçek ekran görüntüleri Gowitness çalışmasının başarısına bağlıdır.
-- `nuclei_targets.txt` çalışma sırasında geçici olarak oluşturulur ve normal akış sonunda silinir; kalıcı çıktı olarak değerlendirilmez.
+The score helps order manual investigation. It does not prove exploitability or business impact.
 
-Araçlar eksikse, alt süreçler başarısız olursa veya uygun hedef bulunmazsa bu çıktıların bir bölümü oluşmayabilir.
-
-## Puanlama ve sonuçların yorumlanması
-
-Her hedef sıfır puanla başlar. Mevcut puanlama sinyalleri şunlardır:
-
-| Sinyal | Puan |
+| Signal | Points |
 |---|---:|
-| Hostname etiketinde `dev`, `test`, `staging`, `admin`, `api`, `beta` veya `internal` bulunması | Her eşleşme için +15 |
-| HTTP durumunun 401 veya 403 olması | +10 |
-| HTTP durumunun 500 veya üzeri olması | +20 |
-| Sayfa başlığında `swagger` bulunması | +25 |
-| Sayfa başlığında `index of` bulunması | +30 |
-| Hostname içinde `admin` bulunması ve durumun 403 olması | +20 |
-| En az altı hedefte content-length değerinin ortalama + 2 standart sapmadan büyük olması | +20 |
+| Exact hostname label: `dev`, `test`, `staging`, `admin`, `api`, `beta`, `internal` | +15 each |
+| HTTP 401 or 403 | +10 |
+| HTTP 5xx | +20 |
+| Page title contains `swagger` | +25 |
+| Page title contains `index of` | +30 |
+| `admin` hostname with HTTP 403 | +20 |
+| Content length above mean + 2σ with at least six samples | +20 |
 
-Puan etiketleri:
-
-| Puan | Etiket |
+| Score | Priority label |
 |---:|---|
-| 0–19 | `LOW` |
-| 20–39 | `MEDIUM` |
-| 40–69 | `HIGH` |
-| 70 ve üzeri | `CRITICAL` |
+| 0–19 | LOW |
+| 20–39 | MEDIUM |
+| 40–69 | HIGH |
+| 70+ | CRITICAL |
 
-Bu etiketler bir zafiyetin varlığını veya etkisini doğrulamaz. Örneğin 403 yanıtı, Swagger başlığı ya da sıra dışı içerik uzunluğu tek başına güvenlik açığı değildir. Sonuçlar manuel olarak doğrulanmalıdır. Mevcut kod HTTP header skorlama yapmaz.
-
-## Güvenlik önlemleri
-
-Mevcut uygulamada aşağıdaki savunmalar bulunur:
-
-- Domain sözdizimi ve etiket uzunlukları doğrulanır.
-- Uluslararası domainler Python'ın IDNA kodlayıcısıyla ASCII biçimine dönüştürülür.
-- Çözülmüş çıktı yolunun çalışma dizininin doğrudan altında kaldığı kontrol edilir.
-- HTML raporundaki domain ve hedef alanları escape edilir; risk CSS sınıfı izin verilen dört değerle sınırlandırılır.
-- Harici komutlar argüman listeleriyle çalıştırılır; `shell=True` kullanılmaz.
-
-Bu önlemler mutlak bir güvenlik garantisi değildir. Araç halen dış programlara, onların çıktılarına ve çalıştırıldığı ortamın güvenli yapılandırılmasına bağlıdır.
-
-## Testler
-
-Mevcut `unittest` testlerini çalıştırmak için:
+## Development
 
 ```bash
-python3 -m unittest discover -s tests -v
+python -m pip install -e .
+python -m compileall -q src recon_prime.py
+python -m unittest discover -s tests -v
 ```
 
-Testler şu senaryoları kapsar:
+The test suite covers domain and path validation, HTTP record parsing, subprocess failure reporting, scoring, anomaly detection, HTML escaping, and JSON output.
 
-- Geçerli domainlerin ve IDNA girdilerinin normalizasyonu
-- URL, port, yol, path traversal ve bozuk hostname girdilerinin reddedilmesi
-- Çıktı klasörünün seçilen kök dizinin doğrudan altında kalması
-- Geçersiz girdide çıktı oluşturulmaması
-- HTML raporundaki dinamik alanların escape edilmesi
-- Risk CSS sınıfının izin verilen değerlerle sınırlandırılması
+## Responsible use
 
-Puanlama, `httpx` JSON ayrıştırması ve dış süreç entegrasyonları için henüz test bulunmamaktadır.
+Use this project only on assets you own or are explicitly authorized to assess. Confirm program scope, automation rules, rate limits, and third-party restrictions before running it. Nuclei and screenshot collection are deliberately disabled unless their flags are supplied.
 
-## Sınırlamalar
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and [CONTRIBUTING.md](CONTRIBUTING.md) for development guidance.
 
-- Temel çalışma Subfinder ve `httpx-toolkit` adlı harici çalıştırılabilir dosyalara bağlıdır.
-- Harici araçların CLI seçenekleri ve çıktı formatları sürümler arasında değişebilir. Özellikle resmî `httpx` adı ile kodun beklediği `httpx-toolkit` adı ve Gowitness komut biçimi uyumluluk gerektirir.
-- Puanlama sezgiseldir; doğrulanmış zafiyet veya kapsamlı risk analizi sağlamaz.
-- `httpx` tarafından toplanan teknoloji ve web sunucusu alanları mevcut raporda kullanılmaz.
-- Bazı bozuk `httpx` kayıtlarında ayrıştırma/puan eşleştirme davranışı geliştirilmeye ihtiyaç duyar.
-- Alt süreçlerin return code ve stderr değerleri sistematik olarak işlenmez; süreç seviyesinde genel timeout yönetimi yoktur.
-- Nuclei, puanı en az 20 olan hedef bulunduğunda ve kuruluysa ayrıca onay istemeden çalışır. Aktif tarama yalnızca açık izin ve doğru kapsamla kullanılmalıdır.
-- Flask dashboard geliştirme sunucusudur; üretim servisi olarak tasarlanmamıştır.
+## License
 
-## Etik ve yetkili kullanım
-
-Bu aracı yalnızca sahibi tarafından açıkça izin verilen sistemlerde veya kapsamı açık biçimde tanımlanmış bug bounty programlarında kullanın. Hedefin program kapsamına dahil olduğunu, kullanılan tarama yöntemlerine izin verildiğini ve hız/otomasyon kurallarına uyulduğunu önceden doğrulayın.
-
-Kullanıcı; hedef kapsamından, platform kurallarından, üçüncü taraf hizmet koşullarından ve yürürlükteki yerel mevzuata uyumdan sorumludur. Aracın erişilebilir bir hedef üzerinde çalışması, o hedefi tarama yetkisi vermez.
-
-## Yol haritası
-
-- Aktif Nuclei taramasını açık bir kullanıcı onayı veya CLI seçeneğine bağlamak
-- Alt süreçlerde return code, stderr ve genel timeout yönetimi eklemek
-- Puanlama, JSON ayrıştırma ve hata senaryoları için test kapsamını genişletmek
-- CLI, keşif, puanlama, raporlama ve entegrasyon kodlarını modüllere ayırmak
-- Python ve harici araç bağımlılıklarının doğrulanmış sürümlerini sabitlemek
-
-## Lisans
-
-Bu proje [MIT Lisansı](LICENSE) altında yayımlanmıştır. Ayrıntılar için `LICENSE` dosyasına bakın.
+[MIT](LICENSE) © 2026 Muhammet (LordMs)
